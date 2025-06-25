@@ -1,123 +1,134 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Box, Skeleton, Typography } from '@mui/material';
+import { Box, Grid, Typography, CircularProgress, Skeleton } from '@mui/material';
 import { fetchStockOverview } from '../services/api';
 import type { StockOverview } from '../types/stock';
-import ChartComponent from './ChartComponent';
-import DataCard from './DataCard';
 import StockOverviewCard from './StockOverviewCard';
+import ChartComponent from './ChartComponent';
+import StockSearch from './StockSearch';
+import PortfolioManager from './PortfolioManager';
+import NavBar from './NavBar';
+import { useTheme as useAppTheme } from '../context/ThemeContext';
 
 const StockDashboard: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPortfolio, setShowPortfolio] = useState(false);
+  const { isDarkMode } = useAppTheme();
+
+  const handleSearch = async (searchSymbol: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const stockData = await fetchStockOverview(searchSymbol);
+      setStock(stockData);
+    } catch (err) {
+      setError('Failed to fetch stock data. Please try again.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePortfolioToggle = (show: boolean) => {
+    setShowPortfolio(show);
+  };
 
   useEffect(() => {
     if (symbol) {
-      setLoading(true);
-      setError(null);
-      
-      fetchStockOverview(symbol)
-        .then(data => {
-          setStock(data);
-          setLoading(false);
-        })
-        .catch(err => {
-          setError('Failed to fetch stock data. Please try again later.');
-          setLoading(false);
-        });
+      handleSearch(symbol);
+    } else {
+      setLoading(false);
     }
   }, [symbol]);
 
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <Box className="grid-container" gap={2}>
-          <StockOverviewCard
-            overview={null}
-            loading={true}
-            error={null}
-          />
-          <DataCard title="Analyst Ratings" loading={true}>
-            <Box mt={1}>
-              <Skeleton variant="text" />
-              <Skeleton variant="text" />
-              <Skeleton variant="text" />
-              <Skeleton variant="text" />
-              <Skeleton variant="text" />
-            </Box>
-          </DataCard>
-          <DataCard title="Price Chart" loading={true}>
-            <Skeleton variant="rectangular" height={200} />
-          </DataCard>
-        </Box>
-      );
-    }
-    
-    if (error) {
-      return (
-        <StockOverviewCard
-          overview={null}
-          loading={false}
-          error={error}
-        />
-      );
-    }
-    
-    if (!stock) {
-      return (
-        <StockOverviewCard
-          overview={null}
-          loading={false}
-          error="No stock data available for this symbol. Please try another search."
-        />
-      );
-    }
-    
-    return (
-      <Box className="grid-container">
-        <StockOverviewCard
-          overview={stock}
-          loading={false}
-          error={null}
-        />
-        
-        <DataCard title="Analyst Ratings">
-          <Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(120px, 1fr))" gap={1.5}>
-            <div>
-              <Typography variant="subtitle2" color="text.secondary">Strong Buy</Typography>
-              <Typography>{stock.analystRating?.strongBuy || 0}</Typography>
-            </div>
-            <div>
-              <Typography variant="subtitle2" color="text.secondary">Buy</Typography>
-              <Typography>{stock.analystRating?.buy || 0}</Typography>
-            </div>
-            <div>
-              <Typography variant="subtitle2" color="text.secondary">Hold</Typography>
-              <Typography>{stock.analystRating?.hold || 0}</Typography>
-            </div>
-            <div>
-              <Typography variant="subtitle2" color="text.secondary">Sell</Typography>
-              <Typography>{stock.analystRating?.sell || 0}</Typography>
-            </div>
-            <div>
-              <Typography variant="subtitle2" color="text.secondary">Strong Sell</Typography>
-              <Typography>{stock.analystRating?.strongSell || 0}</Typography>
-            </div>
-          </Box>
-        </DataCard>
-        
-        <DataCard title="Price Chart">
-          <ChartComponent stock={stock} />
-        </DataCard>
-      </Box>
-    );
-  };
-
   return (
-    <Box sx={{ py: 3 }}>
-      {renderContent()}
+    <Box sx={{ 
+      minHeight: '100vh', 
+      backgroundColor: isDarkMode ? 'background.default' : 'grey.100',
+    }}>
+      <NavBar onPortfolioToggle={handlePortfolioToggle} />
+      
+      <Box sx={{ 
+        maxWidth: 1200, 
+        mx: 'auto',
+        p: 3
+      }}>
+        <Box sx={{ 
+          backgroundColor: isDarkMode ? 'background.paper' : '#fff',
+          borderRadius: 'shape.borderRadius',
+          boxShadow: 1,
+          overflow: 'hidden',
+          mb: 3
+        }}>
+          <Box sx={{ p: 3 }}>
+            <StockSearch onSearch={handleSearch} loading={loading} />
+          </Box>
+        </Box>
+        
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={showPortfolio ? 8 : 12}>
+            {loading && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+              </Box>
+            )}
+
+            {error && (
+              <Box sx={{ mt: 2 }}>
+                <Typography color="error">{error}</Typography>
+              </Box>
+            )}
+
+            {!loading && !error && stock && (
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <StockOverviewCard
+                    overview={stock}
+                    loading={false}
+                    error={null}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <ChartComponent
+                    stock={stock}
+                    loading={false}
+                    error={null}
+                  />
+                </Grid>
+              </Grid>
+            )}
+
+            {!loading && !error && !stock && (
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                minHeight: 300,
+                textAlign: 'center',
+                mt: 4
+              }}>
+                <Typography variant="h6" color="text.secondary">
+                  Search for a stock symbol to get started
+                </Typography>
+                <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                  Try searching for "AAPL", "MSFT", or "GOOGL"
+                </Typography>
+              </Box>
+            )}
+          </Grid>
+          
+          {showPortfolio && (
+            <Grid item xs={12} md={4}>
+              <PortfolioManager />
+            </Grid>
+          )}
+        </Grid>
+      </Box>
     </Box>
   );
 };
