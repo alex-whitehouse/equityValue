@@ -1,0 +1,16 @@
+{
+  "name": "overview-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function for company overview",
+  "main": "overviewHandler.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.188.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

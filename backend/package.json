@@ -1,0 +1,10 @@
+{
+  "name": "asic-margin-backend",
+  "version": "1.0.0",
+  "description": "Backend services for ASIC Margin",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "aws-sdk": "^2.1588.0",
+    "node-fetch": "^3.3.2"
+  }
+}

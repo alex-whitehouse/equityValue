@@ -1,0 +1,33 @@
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# Node.js
+**/node_modules/
+
+# Environment/config files
+.env
+.env.*
+!*.example
+env.json
+
+# Build artifacts
+dist/
+build/
+out/
+coverage/
+
+# IDE/Editor
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/

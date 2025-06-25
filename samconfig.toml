@@ -1,0 +1,11 @@
+version = 0.1
+[default.local_start_api.parameters]
+env_vars = "ALPHA_VANTAGE_API_KEY=HC5LJW21H36WULAK"
+
+[default.deploy.parameters]
+stack_name = "asicMargin-app"
+resolve_s3 = true
+s3_prefix = "asicMargin-app"
+region = "eu-west-2"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []

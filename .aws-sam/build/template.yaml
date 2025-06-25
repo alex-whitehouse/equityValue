@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ASIC Margin Backend API
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: nodejs20.x
+    Environment:
+      Variables:
+        ALPHA_VANTAGE_API_KEY_PARAM: /asic-margin/alpha-vantage-api-key
+        CACHE_TABLE_NAME: AlphaVantageCache
+  Api:
+    Auth:
+      DefaultAuthorizer: NONE
+    Cors:
+      AllowOrigin: '''*'''
+      AllowMethods: '''GET,OPTIONS'''
+      AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+Resources:
+  SearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: search/searchHandler.handler
+      CodeUri: SearchFunction
+      Environment:
+        Variables:
+          ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:Query
+          Resource: arn:aws:dynamodb:*:*:table/AlphaVantageCache
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /search
+            Method: GET
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      SamResourceId: SearchFunction
+  OverviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: overview/overviewHandler.handler
+      CodeUri: OverviewFunction
+      Environment:
+        Variables:
+          ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:Query
+          Resource: arn:aws:dynamodb:*:*:table/AlphaVantageCache
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /overview/{symbol}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+    Metadata:
+      SamResourceId: OverviewFunction
+Outputs:
+  SearchApi:
+    Description: Search API endpoint
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/search
+  OverviewApi:
+    Description: Overview API endpoint
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/overview
