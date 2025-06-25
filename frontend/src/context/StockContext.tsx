@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
-import { fetchStockOverview } from '../services/api';
 import type { StockSearchResult, StockOverview } from '../types/stock';
 
 interface StockContextType {

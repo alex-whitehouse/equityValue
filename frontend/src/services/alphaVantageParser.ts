@@ -1,52 +1,73 @@
 import type { StockOverview } from '../types/stock';
 
-export function parseAlphaVantageOverviewResponse(data: any): StockOverview {
-  // Basic validation
-  if (typeof data !== 'object' || data === null) {
-    throw new Error('Invalid API response: expected object');
+// Helper function for safe number parsing with error handling
+function parseNumber(value: any, fieldName: string): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    console.warn(`Missing value for field: ${fieldName}`);
+    return undefined;
   }
-
-  // Required fields
-  const requiredFields = ['Symbol', 'Name', 'Description', 'Sector', 'Industry',
-    'MarketCapitalization', '52WeekHigh', '52WeekLow', 'PERatio', 'DividendYield', 'EPS',
-    'RevenueTTM', 'ProfitMargin', 'AnalystTargetPrice',
-    'RatingStrongBuy', 'RatingBuy', 'RatingHold', 'RatingSell', 'RatingStrongSell',
-    'Beta', 'Volume', 'Open', 'High', 'Low', 'Close', 'LatestTradingDay'];
   
-  const missingFields = requiredFields.filter(field => !(field in data));
-  if (missingFields.length > 0) {
-    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+  const num = parseFloat(value);
+  if (isNaN(num)) {
+    console.warn(`Invalid numeric value for field ${fieldName}: '${value}'`);
+    return undefined;
   }
+  return num;
+}
 
-  return {
-    symbol: data.Symbol,
-    name: data.Name,
-    description: data.Description,
-    sector: data.Sector,
-    industry: data.Industry,
-    marketCap: parseFloat(data.MarketCapitalization),
-    high52: parseFloat(data['52WeekHigh']),
-    low52: parseFloat(data['52WeekLow']),
-    peRatio: parseFloat(data.PERatio),
-    dividendYield: parseFloat(data.DividendYield),
-    eps: parseFloat(data.EPS),
-    revenue: parseFloat(data.RevenueTTM),
-    profitMargin: parseFloat(data.ProfitMargin),
-    analystTargetPrice: parseFloat(data.AnalystTargetPrice),
-    analystRating: {
-      strongBuy: parseInt(data.RatingStrongBuy, 10),
-      buy: parseInt(data.RatingBuy, 10),
-      hold: parseInt(data.RatingHold, 10),
-      sell: parseInt(data.RatingSell, 10),
-      strongSell: parseInt(data.RatingStrongSell, 10)
-    },
-    beta: parseFloat(data.Beta),
-    volume: parseFloat(data.Volume),
-    open: parseFloat(data.Open),
-    high: parseFloat(data.High),
-    low: parseFloat(data.Low),
-    close: parseFloat(data.Close),
-    latestTradingDay: data.LatestTradingDay,
-    lastUpdated: new Date()
-  };
+export function parseAlphaVantageOverviewResponse(data: any): StockOverview {
+  try {
+    console.debug('[DEBUG] Parsing AlphaVantage response:', JSON.stringify(data, null, 2));
+    
+    // Validate response structure
+    if (typeof data !== 'object' || data === null) {
+      throw new Error('Invalid API response: expected object');
+    }
+    
+    // Validate required fields
+    const requiredFields = ['Symbol', 'Name', 'Sector', 'Industry'];
+    const missingFields = requiredFields.filter(field => !data[field]);
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    // Make all fields optional - return undefined for missing/invalid values
+    return {
+      symbol: data.Symbol,
+      name: data.Name,
+      description: data.Description,
+      sector: data.Sector,
+      industry: data.Industry,
+      marketCap: parseNumber(data.MarketCapitalization, 'MarketCapitalization'),
+      high52: parseNumber(data['52WeekHigh'], '52WeekHigh'),
+      low52: parseNumber(data['52WeekLow'], '52WeekLow'),
+      peRatio: parseNumber(data.PERatio, 'PERatio'),
+      dividendYield: parseNumber(data.DividendYield, 'DividendYield'),
+      eps: parseNumber(data.EPS, 'EPS'),
+      revenue: parseNumber(data.RevenueTTM, 'RevenueTTM'),
+      profitMargin: parseNumber(data.ProfitMargin, 'ProfitMargin'),
+      analystTargetPrice: parseNumber(data.AnalystTargetPrice, 'AnalystTargetPrice'),
+      beta: parseNumber(data.Beta, 'Beta'),
+        
+      // Fields not in AlphaVantage response - set to defaults
+      analystRating: {
+        strongBuy: 0,
+        buy: 0,
+        hold: 0,
+        sell: 0,
+        strongSell: 0
+      },
+      volume: 0,
+      open: 0,
+      high: 0,
+      low: 0,
+      close: 0,
+      latestTradingDay: '',
+      
+      lastUpdated: new Date()
+    };
+  } catch (error) {
+    console.error('[ERROR] Failed to parse AlphaVantage response:', error);
+    throw new Error(`Parsing failed: ${(error as Error).message}`);
+  }
 }

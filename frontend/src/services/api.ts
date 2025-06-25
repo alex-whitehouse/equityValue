@@ -38,6 +38,7 @@ export const fetchStockOverview = async (
 
   try {
     const response = await api.get(`/overview/${symbol}`);
+    console.debug(`[DEBUG] API response for ${symbol}:`, response.data);
     
     // Parse and validate the response
     const parsedData = parseAlphaVantageOverviewResponse(response.data);
@@ -50,14 +51,32 @@ export const fetchStockOverview = async (
     
     return parsedData;
   } catch (error) {
-    console.error('Error fetching stock overview:', error);
+    let errorMessage = 'Failed to fetch stock overview';
+    
+    if (axios.isAxiosError(error)) {
+      // Enhanced Axios error handling
+      const status = error.response?.status;
+      const serverMessage = error.response?.data?.error || error.response?.data?.message;
+      
+      if (serverMessage) {
+        errorMessage += `: ${serverMessage}`;
+      } else if (status) {
+        errorMessage += `: HTTP ${status}`;
+      }
+      
+      console.error(`[ERROR] API request failed for ${symbol}: ${errorMessage}`);
+      console.debug('[DEBUG] Full error response:', error.response);
+    } else {
+      errorMessage += `: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(`[ERROR] Non-Axios error for ${symbol}:`, error);
+    }
     
     // Return cached data if available on error
     if (cached) {
-      console.warn('Returning cached data due to API error');
+      console.warn(`Returning cached data for ${symbol} due to API error`);
       return cached.data;
     }
     
-    throw new Error('Failed to fetch stock overview: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    throw new Error(errorMessage);
   }
 };
