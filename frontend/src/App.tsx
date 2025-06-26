@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import SearchBar from './components/SearchBar';
 import StockDashboard from './components/StockDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
+import LandingPage from './components/LandingPage';
 import { Box, Container, Typography, Chip, Paper, List, ListItem, ListItemText } from '@mui/material';
 import type { StockSearchResult } from './types/stock';
 
@@ -43,12 +45,12 @@ function App() {
       )}
 
       <Routes>
-        <Route path="/overview/:symbol" element={<StockDashboard />} />
-        <Route path="/" element={
-          <Typography variant="body1">
-            Search for a stock to see its dashboard. Selected stocks will appear in your portfolio.
-          </Typography>
+        <Route path="/overview/:symbol" element={
+          <ProtectedRoute>
+            <StockDashboard />
+          </ProtectedRoute>
         } />
+        <Route path="/" element={<LandingPage />} />
       </Routes>
     </Container>
   );
