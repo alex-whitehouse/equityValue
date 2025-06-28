@@ -14,6 +14,9 @@ npm install
 npm test
 cd ../..
 
+# Install jq for JSON parsing
+sudo apt-get install -y jq
+
 # Install AWS SAM CLI if not already installed
 if ! command -v sam &> /dev/null; then
     echo "Installing AWS SAM CLI..."

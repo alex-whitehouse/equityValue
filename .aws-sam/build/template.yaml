@@ -7,7 +7,6 @@ Globals:
     Runtime: nodejs20.x
     Environment:
       Variables:
-        ALPHA_VANTAGE_API_KEY_PARAM: /asic-margin/alpha-vantage-api-key
         CACHE_TABLE_NAME: AlphaVantageCache
   Api:
     Auth:
@@ -24,7 +23,9 @@ Resources:
       CodeUri: SearchFunction
       Environment:
         Variables:
-          ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+          ALPHA_VANTAGE_API_KEY: '{{resolve:ssm:/asic/alphaVantage/apiKey}}'
+          COGNITO_USER_POOL_ID: '{{resolve:ssm:/asic/cognito/userPoolId}}'
+          COGNITO_CLIENT_ID: '{{resolve:ssm:/asic/cognito/appClientId}}'
       Policies:
       - Statement:
         - Effect: Allow
@@ -51,7 +52,9 @@ Resources:
       CodeUri: OverviewFunction
       Environment:
         Variables:
-          ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+          ALPHA_VANTAGE_API_KEY: '{{resolve:ssm:/asic/alphaVantage/apiKey}}'
+          COGNITO_USER_POOL_ID: '{{resolve:ssm:/asic/cognito/userPoolId}}'
+          COGNITO_CLIENT_ID: '{{resolve:ssm:/asic/cognito/appClientId}}'
       Policies:
       - Statement:
         - Effect: Allow

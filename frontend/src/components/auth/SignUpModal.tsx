@@ -32,9 +32,17 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
     try {
       await signUp(email, password);
       setSuccess(true);
-    } catch (err) {
-      setError('Failed to create account. Please try again.');
-      console.error('Sign up error:', err);
+    } catch (error: any) {
+      let message = 'Failed to create account';
+      if (error.name === 'UsernameExistsException') {
+        message = 'Email already registered';
+      } else if (error.name === 'InvalidPasswordException') {
+        message = 'Password must contain uppercase, number, and special character';
+      } else if (error.name === 'InvalidParameterException') {
+        message = 'Invalid email format';
+      }
+      setError(message);
+      console.error('Sign up error:', error);
     } finally {
       setLoading(false);
     }

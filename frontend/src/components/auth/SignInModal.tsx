@@ -25,9 +25,17 @@ export default function SignInModal({ open, onClose, onSwitchToSignUp, onSwitchT
     try {
       await signIn(email, password);
       onClose();
-    } catch (err) {
-      setError('Failed to sign in. Please check your credentials.');
-      console.error('Sign in error:', err);
+    } catch (error: any) {
+      let message = 'Failed to sign in';
+      if (error.name === 'UserNotFoundException') {
+        message = 'User not found';
+      } else if (error.name === 'NotAuthorizedException') {
+        message = 'Incorrect password';
+      } else if (error.name === 'UserNotConfirmedException') {
+        message = 'Please verify your email first';
+      }
+      setError(message);
+      console.error('Sign in error:', error);
     } finally {
       setLoading(false);
     }

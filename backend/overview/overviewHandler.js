@@ -9,15 +9,19 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET,OPTIONS'
 };
 
-exports.handler = async (event) => {
-  // Handle OPTIONS request for CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: ''
-    };
-  }
+const authMiddleware = require('../shared/authMiddleware');
+const { fetchAlphaVantageData } = require('../shared/alphaVantageClient');
+const { getFromCache, setInCache } = require('../shared/cacheManager');
+
+// CORS headers configuration
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Credentials': true,
+  'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS'
+};
+
+exports.handler = authMiddleware.handler(async (event) => {
   try {
     const { symbol } = event.pathParameters || {};
     if (!symbol) {
@@ -96,6 +100,6 @@ exports.handler = async (event) => {
       })
     };
   }
-};
+});
 // SELinux context fix applied at ${new Date().toISOString()}
 // Template update applied at ${new Date().toISOString()}

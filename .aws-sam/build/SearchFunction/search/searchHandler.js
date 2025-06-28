@@ -1,3 +1,4 @@
+const authMiddleware = require('../shared/authMiddleware');
 const { fetchAlphaVantageData } = require('../shared/alphaVantageClient');
 const { getFromCache, setInCache } = require('../shared/cacheManager');
 
@@ -9,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET,OPTIONS'
 };
 
-exports.handler = async (event) => {
+exports.handler = authMiddleware.handler(async (event) => {
   // Handle OPTIONS request for CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -82,4 +83,4 @@ exports.handler = async (event) => {
       message: error.message
     });
   }
-};// Deployment trigger: Tue 24 Jun 22:01:42 BST 2025
+});// Deployment trigger: Tue 24 Jun 22:01:42 BST 2025

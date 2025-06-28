@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import CssBaseline from '@mui/material/CssBaseline'
 import { BrowserRouter as Router } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
+import { AuthProvider } from './context/AuthContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,7 +14,9 @@ createRoot(document.getElementById('root')!).render(
       <CssBaseline />
       <Router>
         <ErrorBoundary>
-          <App />
+          <AuthProvider>
+            <App />
+          </AuthProvider>
         </ErrorBoundary>
       </Router>
     </ThemeProvider>
