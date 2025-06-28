@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { signIn, signUp, signOut, fetchAuthSession, resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 import { jwtDecode } from 'jwt-decode';
+import * as authService from '../services/authService';
 
 interface User {
   username: string;
@@ -14,6 +14,8 @@ interface AuthContextType {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  confirmSignUp: (email: string, code: string) => Promise<void>;
+  resendSignUpCode: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
@@ -63,12 +65,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const checkAuth = async () => {
       try {
-        const session = await fetchAuthSession();
-        const token = session.tokens?.idToken?.toString();
-        if (!token) throw new Error('No token found');
+        const token = localStorage.getItem('idToken');
+        if (!token) throw new Error('No token found in storage');
         
         const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(token);
-        localStorage.setItem('idToken', token);
+        
+        // Check token expiration
+        if (decoded.exp * 1000 < Date.now()) {
+          throw new Error('Token expired');
+        }
         
         setUser({ username: decoded.email, email: decoded.email });
         setIsAuthenticated(true);
@@ -85,19 +90,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [isAuthenticated]);
 
+  const refreshTimer = useRef<number | null>(null);
+
+  // Clear refresh timer on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+      }
+    };
+  }, []);
+
   const handleSignIn = async (email: string, password: string) => {
     try {
-      await signIn({ username: email, password });
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
-      if (!token) throw new Error('No token found after sign in');
+      const { idToken, accessToken, expiresIn } = await authService.signIn(email, password);
       
-      const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(token);
-      localStorage.setItem('idToken', token);
+      const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(idToken);
+      localStorage.setItem('idToken', idToken);
+      localStorage.setItem('accessToken', accessToken);
       
       setUser({ username: decoded.email, email: decoded.email });
       setIsAuthenticated(true);
       setAuthModalType(null);
+      
+      // Schedule token refresh 1 minute before expiration
+      const expiresAt = decoded.exp * 1000;
+      scheduleTokenRefresh(expiresAt - Date.now() - 60000);
     } catch (error) {
       console.error('Error signing in:', error);
       throw error;
@@ -106,24 +124,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const handleSignUp = async (email: string, password: string) => {
     try {
-      await signUp({
-        username: email,
-        password,
-        options: {
-          userAttributes: { email }
-        }
-      });
-      setAuthModalType(null);
+      await authService.signUp(email, password);
+      // Keep modal open to show confirmation step
     } catch (error) {
       console.error('Error signing up:', error);
       throw error;
     }
   };
 
+  const handleConfirmSignUp = async (email: string, code: string) => {
+    try {
+      await authService.confirmSignUp(email, code);
+      setAuthModalType(null);
+    } catch (error) {
+      console.error('Error confirming sign up:', error);
+      throw error;
+    }
+  };
+
+  const handleResendSignUpCode = async (email: string) => {
+    try {
+      await authService.resendSignUpCode(email);
+    } catch (error) {
+      console.error('Error resending code:', error);
+      throw error;
+    }
+  };
+
   const handleSignOut = async () => {
     try {
-      await signOut();
+      const accessToken = localStorage.getItem('accessToken') || '';
+      await authService.signOut();
+      
       localStorage.removeItem('idToken');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      
       setUser(null);
       setIsAuthenticated(false);
     } catch (error) {
@@ -134,7 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const handleForgotPassword = async (email: string) => {
     try {
-      await resetPassword({ username: email });
+      await authService.forgotPassword(email);
       setAuthModalType(null);
     } catch (error) {
       console.error('Error initiating password reset:', error);
@@ -144,11 +180,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const handleResetPassword = async (email: string, code: string, newPassword: string) => {
     try {
-      await confirmResetPassword({ username: email, confirmationCode: code, newPassword });
+      await authService.resetPassword(email, code, newPassword);
       setAuthModalType(null);
     } catch (error) {
       console.error('Error resetting password:', error);
       throw error;
+    }
+  };
+  
+  const scheduleTokenRefresh = (delay: number) => {
+    if (refreshTimer.current) {
+      clearTimeout(refreshTimer.current);
+    }
+    
+    refreshTimer.current = setTimeout(() => {
+      refreshToken();
+    }, delay);
+  };
+  
+  const refreshToken = async () => {
+    try {
+      // Call authService to refresh tokens using HTTP-only cookie
+      const { idToken, accessToken, expiresIn } = await authService.refreshToken();
+
+      // Update tokens in localStorage
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('idToken', idToken);
+
+      // Schedule next refresh 1 minute before expiration
+      const expiresAt = Date.now() + expiresIn * 1000;
+      scheduleTokenRefresh(expiresAt - Date.now() - 60000);
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      handleSignOut();
     }
   };
 
@@ -185,6 +249,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading,
         signIn: handleSignIn,
         signUp: handleSignUp,
+        confirmSignUp: handleConfirmSignUp,
+        resendSignUpCode: handleResendSignUpCode,
         signOut: handleSignOut,
         forgotPassword: handleForgotPassword,
         resetPassword: handleResetPassword,

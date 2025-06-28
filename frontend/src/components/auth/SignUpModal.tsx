@@ -1,7 +1,18 @@
-import { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, TextField, Button, Box, Typography, IconButton } from '@mui/material';
+import React, { useState } from 'react';
+import { 
+  Dialog, 
+  DialogTitle, 
+  DialogContent, 
+  TextField, 
+  Button, 
+  Typography, 
+  Box,
+  IconButton
+} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../../context/AuthContext';
+import { mapCognitoError } from '../../services/authService';
+import ConfirmSignUpModal from './ConfirmSignUpModal';
 
 interface SignUpModalProps {
   open: boolean;
@@ -14,9 +25,9 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
+  const { signUp, resendSignUpCode } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,17 +42,9 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
     
     try {
       await signUp(email, password);
-      setSuccess(true);
+      setShowConfirmation(true);
     } catch (error: any) {
-      let message = 'Failed to create account';
-      if (error.name === 'UsernameExistsException') {
-        message = 'Email already registered';
-      } else if (error.name === 'InvalidPasswordException') {
-        message = 'Password must contain uppercase, number, and special character';
-      } else if (error.name === 'InvalidParameterException') {
-        message = 'Invalid email format';
-      }
-      setError(message);
+      setError(mapCognitoError(error).message);
       console.error('Sign up error:', error);
     } finally {
       setLoading(false);
@@ -49,38 +52,19 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>
-        Create Account
-        <IconButton 
-          aria-label="close" 
-          onClick={onClose} 
-          sx={{ position: 'absolute', right: 8, top: 8 }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent>
-        {success ? (
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h6" gutterBottom>
-              Account Created!
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 2 }}>
-              A verification email has been sent to {email}.
-              Please check your inbox to verify your account.
-            </Typography>
-            <Button 
-              variant="contained" 
-              onClick={() => {
-                setSuccess(false);
-                onSwitchToSignIn();
-              }}
-            >
-              Sign In Now
-            </Button>
-          </Box>
-        ) : (
+    <React.Fragment>
+      <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          Create Account
+          <IconButton 
+            aria-label="close" 
+            onClick={onClose} 
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
           <form onSubmit={handleSubmit}>
             <TextField
               margin="normal"
@@ -135,8 +119,19 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
               </Button>
             </Box>
           </form>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      
+      <ConfirmSignUpModal
+        open={showConfirmation}
+        email={email}
+        onClose={() => setShowConfirmation(false)}
+        onConfirm={() => {
+          setShowConfirmation(false);
+          onSwitchToSignIn();
+        }}
+        onResendCode={() => resendSignUpCode(email)}
+      />
+    </React.Fragment>
   );
 }
