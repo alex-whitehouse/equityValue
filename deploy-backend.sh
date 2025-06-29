@@ -1,18 +1,20 @@
 #!/bin/bash
 
+# Get the directory of this script
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Validate environment variables
 if [ -z "$ALPHA_VANTAGE_API_KEY" ]; then
-  echo "Error: The following environment variable must be set:"
-  echo "  ALPHA_VANTAGE_API_KEY"
-  exit 1
+  read -p "Enter your Alpha Vantage API key: " ALPHA_VANTAGE_API_KEY
+  export ALPHA_VANTAGE_API_KEY
 fi
 
 # Create Cognito resources
 echo "Creating Cognito resources..."
 COGNITO_USER_POOL_OUTPUT=$(aws cognito-idp create-user-pool --pool-name asicMarginUserPool --auto-verified-attributes email --username-attributes email)
-COGNITO_USER_POOL_ID=$(echo "$COGNITO_USER_POOL_OUTPUT" | jq -r '.UserPool.Id')
+COGNITO_USER_POOL_ID=$(echo "$COGNITO_USER_POOL_OUTPUT" | jq -r '.UserPool.Id' || echo "")
 # Generate client with secret
-COGNITO_APP_CLIENT_OUTPUT=$(aws cognito-idp create-user-pool-client --user-pool-id "$COGNITO_USER_POOL_ID" --client-name asicMarginAppClient --generate-secret --explicit-auth-flows "ALLOW_USER_PASSWORD_AUTH" "ALLOW_REFRESH_TOKEN_AUTH")
+COGNITO_APP_CLIENT_OUTPUT=$(aws cognito-idp create-user-pool-client --user-pool-id "$COGNITO_USER_POOL_ID" --client-name asicMarginAppClient --generate-secret --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH)
 COGNITO_APP_CLIENT_ID=$(echo "$COGNITO_APP_CLIENT_OUTPUT" | jq -r '.UserPoolClient.ClientId')
 COGNITO_APP_CLIENT_SECRET=$(echo "$COGNITO_APP_CLIENT_OUTPUT" | jq -r '.UserPoolClient.ClientSecret')
 
@@ -24,32 +26,43 @@ fi
 
 # Setup SSM parameters
 echo "Setting up SSM parameters..."
-./scripts/setup-parameters.sh "$COGNITO_USER_POOL_ID" "$COGNITO_APP_CLIENT_ID" "$ALPHA_VANTAGE_API_KEY"
+"$SCRIPT_DIR/scripts/setup-parameters.sh" "$COGNITO_USER_POOL_ID" "$COGNITO_APP_CLIENT_ID" "$COGNITO_APP_CLIENT_SECRET" "$ALPHA_VANTAGE_API_KEY"
 
-# Debug: Print Cognito IDs
+# Debug: Print Cognito IDs (excluding secret for security)
 echo "Cognito User Pool ID: $COGNITO_USER_POOL_ID"
 echo "Cognito App Client ID: $COGNITO_APP_CLIENT_ID"
 
-# Build and deploy backend
-echo "Building and deploying backend..."
-sam build
-sam deploy
+# Build and deploy backend with optimized packaging
+echo "Building and deploying backend with optimized packaging..."
+sam build --template-file "$SCRIPT_DIR/template.yaml" \
+  --exclude "frontend/*" \
+  --exclude "scripts/*" \
+  --exclude "*.sh" \
+  --exclude "*.md"
 
-# Get API endpoint from deployment output
-echo "Extracting API endpoint..."
-SEARCH_API=$(aws cloudformation describe-stacks \
+# Create S3 bucket for deployment artifacts
+ARTIFACTS_BUCKET="asic-margin-artifacts-$(date +%s)"
+aws s3 mb "s3://$ARTIFACTS_BUCKET" --region eu-west-2
+
+# Deploy with the created bucket
+sam deploy --s3-bucket "$ARTIFACTS_BUCKET" \
+  --template-file "$SCRIPT_DIR/template.yaml" \
   --stack-name asicMargin-app \
-  --query 'Stacks[0].Outputs[?OutputKey==`SearchApi`].OutputValue' \
-  --output text)
+  --capabilities CAPABILITY_IAM
 
-if [ -z "$SEARCH_API" ]; then
-  echo "Error: Failed to extract API endpoint. Deployment may have failed."
+# Get API base URL from deployment output
+echo "Extracting API base URL..."
+API_BASE_URL=$(aws cloudformation describe-stacks \
+  --stack-name asicMargin-app \
+  --query 'Stacks[0].Outputs[?OutputKey==`ServerlessRestApi`].OutputValue' \
+  --output text | sed 's|/.*||')
+
+if [ -z "$API_BASE_URL" ]; then
+  echo "Error: Failed to extract API base URL. Deployment may have failed."
   exit 1
 fi
 
-# Derive base URL from search endpoint
-BASE_URL=$(echo "$SEARCH_API" | sed 's|/search$||')
-echo "API_BASE_URL=$BASE_URL"
+echo "API_BASE_URL=$API_BASE_URL"
 
 # Update frontend environment configuration
 echo "Updating frontend environment configuration..."
@@ -57,15 +70,14 @@ echo "Updating frontend environment configuration..."
   echo "VITE_API_BASE_URL=$BASE_URL"
   echo "VITE_USER_POOL_ID=$COGNITO_USER_POOL_ID"
   echo "VITE_USER_POOL_CLIENT_ID=$COGNITO_APP_CLIENT_ID"
-  echo "VITE_USER_POOL_CLIENT_SECRET=$COGNITO_APP_CLIENT_SECRET"
-} > frontend/.env.production
+} > frontend/.env
 
+# Also create production-specific file for future use
 {
   echo "VITE_API_BASE_URL=$BASE_URL"
   echo "VITE_USER_POOL_ID=$COGNITO_USER_POOL_ID"
   echo "VITE_USER_POOL_CLIENT_ID=$COGNITO_APP_CLIENT_ID"
-  echo "VITE_USER_POOL_CLIENT_SECRET=$COGNITO_APP_CLIENT_SECRET"
-} > frontend/.env.development
+} > frontend/.env.production
 
 echo "Deployment complete! API base URL: $BASE_URL"
 echo "Run frontend locally with: npm run dev"

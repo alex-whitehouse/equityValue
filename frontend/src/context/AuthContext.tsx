@@ -58,13 +58,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         // Check token expiration
         if (decoded.exp * 1000 < Date.now()) {
-          debug('Token expired, refreshing');
-          await refreshToken();
+          debug('Token expired, clearing session');
+          localStorage.removeItem('idToken');
+          localStorage.removeItem('accessToken');
+          setUser(null);
+          setIsAuthenticated(false);
         } else {
           debug('Token valid, setting user');
           setUser({ username: decoded.email, email: decoded.email });
           setIsAuthenticated(true);
-          scheduleTokenRefresh(decoded.exp * 1000);
         }
       } catch (error) {
         debug('Session restoration failed', error);
@@ -79,16 +81,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
 
-  const refreshTimer = useRef<number | null>(null);
-
-  // Clear refresh timer on unmount
-  useEffect(() => {
-    return () => {
-      if (refreshTimer.current) {
-        clearTimeout(refreshTimer.current);
-      }
-    };
-  }, []);
 
   const handleSignIn = async (email: string, password: string) => {
     debug('SignIn initiated', { email });
@@ -113,10 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAuthenticated(true);
       setAuthModalType(null);
       
-      // Schedule token refresh 1 minute before expiration
-      const expiresAt = decoded.exp * 1000;
-      debug('Scheduling token refresh at', new Date(expiresAt - 60000).toISOString());
-      scheduleTokenRefresh(expiresAt);
+      // Token refresh scheduling removed - will be implemented later
     } catch (error) {
       debug('SignIn failed', error);
       throw error;
@@ -189,53 +178,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const scheduleTokenRefresh = (expiresAt: number) => {
-    if (refreshTimer.current) {
-      debug('Clearing existing refresh timer');
-      clearTimeout(refreshTimer.current);
-    }
-    
-    const refreshTime = expiresAt - Date.now() - 60000; // 1 minute before expiration
-    if (refreshTime > 0) {
-      debug('Scheduling token refresh', {
-        refreshTimeMs: refreshTime,
-        refreshAt: new Date(Date.now() + refreshTime).toISOString()
-      });
-      refreshTimer.current = setTimeout(() => {
-        debug('Token refresh timer triggered');
-        refreshToken();
-      }, refreshTime);
-    } else {
-      debug('Token refresh not scheduled - expiration too soon or already passed');
-    }
-  };
   
-  const refreshToken = async () => {
-    debug('Refreshing token');
-    try {
-      // Call authService to refresh tokens
-      const { idToken, accessToken } = await authService.refreshToken();
-      debug('Token refresh successful', {
-        idToken: idToken.slice(0, 10) + '...',
-        accessToken: accessToken.slice(0, 10) + '...'
-      });
-
-      // Update tokens in localStorage
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('idToken', idToken);
-
-      // Decode the new token to get expiration
-      const decoded = jwtDecode<{ exp: number }>(idToken);
-      const expiresAt = decoded.exp * 1000;
-      debug('New token expiration', new Date(expiresAt).toISOString());
-      
-      // Schedule next refresh 1 minute before expiration
-      scheduleTokenRefresh(expiresAt);
-    } catch (error) {
-      debug('Token refresh failed', error);
-      handleSignOut();
-    }
-  };
+  // Token refresh will be handled in future implementation
+  // Currently not supported in backend
 
   const restoreSession = useCallback(async () => {
     try {

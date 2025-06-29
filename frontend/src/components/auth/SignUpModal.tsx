@@ -11,7 +11,6 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../../context/AuthContext';
-import { mapCognitoError } from '../../services/authService';
 import ConfirmSignUpModal from './ConfirmSignUpModal';
 
 interface SignUpModalProps {
@@ -44,7 +43,7 @@ export default function SignUpModal({ open, onClose, onSwitchToSignIn }: SignUpM
       await signUp(email, password);
       setShowConfirmation(true);
     } catch (error: any) {
-      setError(mapCognitoError(error).message);
+      setError('Sign up failed. Please try again.');
       console.error('Sign up error:', error);
     } finally {
       setLoading(false);

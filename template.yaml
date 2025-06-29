@@ -13,15 +13,16 @@ Globals:
     Auth:
       DefaultAuthorizer: NONE
     Cors:
-      AllowOrigin: "'*'"
-      AllowMethods: "'GET,OPTIONS'"
+      AllowOrigin: "'https://localhost:5173'"
+      AllowMethods: "'GET,POST,OPTIONS'"
       AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowCredentials: "'true'"
 
 Resources:
   SearchFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: search/searchHandler.handler
+      Handler: backend/search/searchHandler.handler
       CodeUri: backend/
       Environment:
         Variables:
@@ -49,7 +50,7 @@ Resources:
   OverviewFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: overview/overviewHandler.handler
+      Handler: backend/overview/overviewHandler.handler
       CodeUri: backend/
       Environment:
         Variables:
@@ -74,13 +75,50 @@ Resources:
             Auth:
               Authorizer: NONE
 
+  AuthHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: auth/authHandler.handler
+      CodeUri: backend/
+      Runtime: nodejs20.x
+      Timeout: 10
+      Events:
+        Auth:
+          Type: Api
+          Properties:
+            Path: /auth
+            Method: POST
+            Auth:
+              Authorizer: NONE
+        AuthOptions:
+          Type: Api
+          Properties:
+            Path: /auth
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+      Environment:
+        Variables:
+          COGNITO_CLIENT_ID: '{{resolve:ssm:/asic/cognito/appClientId}}'
+          REGION: '${AWS::Region}'
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:*
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: 'arn:aws:ssm:*:*:parameter/asic/cognito/appClientSecret'
 
 Outputs:
   SearchApi:
     Description: "Search API endpoint"
-    Value:
-      Fn::Sub: "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/search"
+    Value: "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/search"
   OverviewApi:
     Description: "Overview API endpoint"
-    Value:
-      Fn::Sub: "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/overview"
+    Value: "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/overview"
+  AuthApi:
+    Description: "Authentication API endpoint"
+    Value: "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/auth"

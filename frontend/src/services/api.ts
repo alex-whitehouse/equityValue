@@ -1,82 +1,62 @@
 import axios from 'axios';
-import type { StockOverview } from '../types/stock';
 
+// Create Axios instance with base URL and headers
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://${ServerlessRestApi}.execute-api.eu-west-2.amazonaws.com/Prod',
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
-// Simple in-memory cache with TTL
-const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  response => response,
+  error => {
+    console.error('API request failed:', error);
+    
+    // Map HTTP status codes to Cognito-like errors
+    const statusMap: Record<number, string> = {
+      400: 'InvalidParameterException',
+      401: 'NotAuthorizedException',
+      403: 'UserNotConfirmedException',
+      404: 'UserNotFoundException',
+      409: 'UsernameExistsException',
+      429: 'LimitExceededException'
+    };
+    
+    const status = error.response?.status || 500;
+    const errorName = statusMap[status] || 'InternalError';
+    
+    // Create Cognito-like error object
+    const cognitoError = new Error(error.response?.data?.error || 'API request failed');
+    cognitoError.name = errorName;
+    
+    return Promise.reject(cognitoError);
+  }
+);
 
-// Enhanced to return error messages from backend
-export const searchStocks = async (keywords: string) => {
+// Stock search API
+const searchStocks = async (keywords: string) => {
   try {
-    const response = await api.get('/search', { params: { keywords } });
+    const response = await api.get('/search', {
+      params: { keywords }
+    });
     return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      // Extract backend error message if available
-      const serverMessage = error.response?.data?.error || error.response?.data?.message;
-      throw new Error(serverMessage || 'Failed to search stocks');
-    }
+    console.error('Stock search failed:', error);
     throw new Error('Failed to search stocks');
   }
 };
 
-import { parseAlphaVantageOverviewResponse } from './alphaVantageParser';
-
-export const fetchStockOverview = async (
-  symbol: string,
-  forceRefresh: boolean = false
-): Promise<StockOverview> => {
-  // Check cache first
-  const cached = cache.get(symbol);
-  if (cached && !forceRefresh && (Date.now() - cached.timestamp < CACHE_TTL)) {
-    return cached.data;
-  }
-
+// Fetch stock overview
+const fetchStockOverview = async (symbol: string) => {
   try {
-    const response = await api.get(`/overview/${symbol}`);
-    console.debug(`[DEBUG] API response for ${symbol}:`, response.data);
-    
-    // Parse and validate the response
-    const parsedData = parseAlphaVantageOverviewResponse(response.data);
-    
-    // Cache with expiration
-    cache.set(symbol, {
-      data: parsedData,
-      timestamp: Date.now()
-    });
-    
-    return parsedData;
+    const response = await api.get(`/stocks/${symbol}`);
+    return response.data;
   } catch (error) {
-    let errorMessage = 'Failed to fetch stock overview';
-    
-    if (axios.isAxiosError(error)) {
-      // Enhanced Axios error handling
-      const status = error.response?.status;
-      const serverMessage = error.response?.data?.error || error.response?.data?.message;
-      
-      if (serverMessage) {
-        errorMessage += `: ${serverMessage}`;
-      } else if (status) {
-        errorMessage += `: HTTP ${status}`;
-      }
-      
-      console.error(`[ERROR] API request failed for ${symbol}: ${errorMessage}`);
-      console.debug('[DEBUG] Full error response:', error.response);
-    } else {
-      errorMessage += `: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`[ERROR] Non-Axios error for ${symbol}:`, error);
-    }
-    
-    // Return cached data if available on error
-    if (cached) {
-      console.warn(`Returning cached data for ${symbol} due to API error`);
-      return cached.data;
-    }
-    
-    throw new Error(errorMessage);
+    console.error('Failed to fetch stock overview:', error);
+    throw new Error('Failed to fetch stock data');
   }
 };
+
+export { api, searchStocks, fetchStockOverview };

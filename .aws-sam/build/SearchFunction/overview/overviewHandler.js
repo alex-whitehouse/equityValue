@@ -1,14 +1,3 @@
-const { fetchAlphaVantageData } = require('../shared/alphaVantageClient');
-const { getFromCache, setInCache } = require('../shared/cacheManager');
-
-// CORS headers configuration
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Credentials': true,
-  'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-  'Access-Control-Allow-Methods': 'GET,OPTIONS'
-};
-
 const authMiddleware = require('../shared/authMiddleware');
 const { fetchAlphaVantageData } = require('../shared/alphaVantageClient');
 const { getFromCache, setInCache } = require('../shared/cacheManager');
