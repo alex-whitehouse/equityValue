@@ -3,6 +3,11 @@ import type { ReactNode } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import * as authService from '../services/authService';
 
+// Debug logger
+const debug = (message: string, data?: any) => {
+  console.debug(`[AuthContext] ${message}`, data);
+};
+
 interface User {
   username: string;
   email: string;
@@ -34,23 +39,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Restore session from localStorage on initial load
   useEffect(() => {
     const restoreSession = async () => {
+      debug('Attempting to restore session from localStorage');
       try {
         const token = localStorage.getItem('idToken');
-        if (!token) throw new Error('No token found in storage');
+        if (!token) {
+          debug('No token found in storage');
+          setIsLoading(false);
+          return;
+        }
         
+        debug('Found token in storage');
         const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(token);
+        debug('Decoded token', {
+          email: decoded.email,
+          exp: new Date(decoded.exp * 1000).toISOString(),
+          currentTime: new Date().toISOString()
+        });
         
         // Check token expiration
         if (decoded.exp * 1000 < Date.now()) {
-          throw new Error('Token expired');
+          debug('Token expired, refreshing');
+          await refreshToken();
+        } else {
+          debug('Token valid, setting user');
+          setUser({ username: decoded.email, email: decoded.email });
+          setIsAuthenticated(true);
+          scheduleTokenRefresh(decoded.exp * 1000);
         }
-        
-        setUser({ username: decoded.email, email: decoded.email });
-        setIsAuthenticated(true);
       } catch (error) {
+        debug('Session restoration failed', error);
         setUser(null);
         setIsAuthenticated(false);
-        localStorage.removeItem('idToken');
       } finally {
         setIsLoading(false);
       }
@@ -59,36 +78,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     restoreSession();
   }, []);
 
-  // Check auth status using Amplify when session is not in localStorage
-  useEffect(() => {
-    if (isAuthenticated) return;
-
-    const checkAuth = async () => {
-      try {
-        const token = localStorage.getItem('idToken');
-        if (!token) throw new Error('No token found in storage');
-        
-        const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(token);
-        
-        // Check token expiration
-        if (decoded.exp * 1000 < Date.now()) {
-          throw new Error('Token expired');
-        }
-        
-        setUser({ username: decoded.email, email: decoded.email });
-        setIsAuthenticated(true);
-      } catch (error) {
-        setUser(null);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (!localStorage.getItem('idToken')) {
-      checkAuth();
-    }
-  }, [isAuthenticated]);
 
   const refreshTimer = useRef<number | null>(null);
 
@@ -102,10 +91,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const handleSignIn = async (email: string, password: string) => {
+    debug('SignIn initiated', { email });
     try {
       const { idToken, accessToken, expiresIn } = await authService.signIn(email, password);
+      debug('SignIn successful', {
+        idToken: idToken.slice(0, 10) + '...',
+        accessToken: accessToken.slice(0, 10) + '...',
+        expiresIn
+      });
       
       const decoded = jwtDecode<{ email: string; sub: string; exp: number }>(idToken);
+      debug('Decoded token', {
+        email: decoded.email,
+        exp: new Date(decoded.exp * 1000).toISOString()
+      });
+      
       localStorage.setItem('idToken', idToken);
       localStorage.setItem('accessToken', accessToken);
       
@@ -115,9 +115,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       // Schedule token refresh 1 minute before expiration
       const expiresAt = decoded.exp * 1000;
-      scheduleTokenRefresh(expiresAt - Date.now() - 60000);
+      debug('Scheduling token refresh at', new Date(expiresAt - 60000).toISOString());
+      scheduleTokenRefresh(expiresAt);
     } catch (error) {
-      console.error('Error signing in:', error);
+      debug('SignIn failed', error);
       throw error;
     }
   };
@@ -152,18 +153,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const handleSignOut = async () => {
+    debug('SignOut initiated');
     try {
-      const accessToken = localStorage.getItem('accessToken') || '';
       await authService.signOut();
+      debug('SignOut successful');
       
       localStorage.removeItem('idToken');
       localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
       
       setUser(null);
       setIsAuthenticated(false);
     } catch (error) {
-      console.error('Error signing out:', error);
+      debug('SignOut failed', error);
       throw error;
     }
   };
@@ -188,30 +189,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const scheduleTokenRefresh = (delay: number) => {
+  const scheduleTokenRefresh = (expiresAt: number) => {
     if (refreshTimer.current) {
+      debug('Clearing existing refresh timer');
       clearTimeout(refreshTimer.current);
     }
     
-    refreshTimer.current = setTimeout(() => {
-      refreshToken();
-    }, delay);
+    const refreshTime = expiresAt - Date.now() - 60000; // 1 minute before expiration
+    if (refreshTime > 0) {
+      debug('Scheduling token refresh', {
+        refreshTimeMs: refreshTime,
+        refreshAt: new Date(Date.now() + refreshTime).toISOString()
+      });
+      refreshTimer.current = setTimeout(() => {
+        debug('Token refresh timer triggered');
+        refreshToken();
+      }, refreshTime);
+    } else {
+      debug('Token refresh not scheduled - expiration too soon or already passed');
+    }
   };
   
   const refreshToken = async () => {
+    debug('Refreshing token');
     try {
-      // Call authService to refresh tokens using HTTP-only cookie
-      const { idToken, accessToken, expiresIn } = await authService.refreshToken();
+      // Call authService to refresh tokens
+      const { idToken, accessToken } = await authService.refreshToken();
+      debug('Token refresh successful', {
+        idToken: idToken.slice(0, 10) + '...',
+        accessToken: accessToken.slice(0, 10) + '...'
+      });
 
       // Update tokens in localStorage
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('idToken', idToken);
 
+      // Decode the new token to get expiration
+      const decoded = jwtDecode<{ exp: number }>(idToken);
+      const expiresAt = decoded.exp * 1000;
+      debug('New token expiration', new Date(expiresAt).toISOString());
+      
       // Schedule next refresh 1 minute before expiration
-      const expiresAt = Date.now() + expiresIn * 1000;
-      scheduleTokenRefresh(expiresAt - Date.now() - 60000);
+      scheduleTokenRefresh(expiresAt);
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      debug('Token refresh failed', error);
       handleSignOut();
     }
   };
